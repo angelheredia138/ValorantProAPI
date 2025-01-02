@@ -1,0 +1,65 @@
+# Build results
+bin/
+obj/
+out/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+*.swp
+
+# User-specific files
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Logs and crash reports
+*.log
+*.tlog
+*.ide.log
+
+# NuGet Packages
+*.nupkg
+packages/
+.nuget/
+
+# Dependency folders
+node_modules/
+
+# Visual Studio Code settings
+.vscode/
+
+# Rider settings
+.idea/
+
+# Resharper settings
+_ReSharper*/
+*.DotSettings.user
+
+# ASP.NET specific files
+wwwroot/
+
+# Other exclusions
+*.vs/
+*.vscode/
+.vs/
+*.dbmdl
+*.jfm
+*.pyc
+__pycache__/
+
+# Generated files from scaffolding
+*.Generated.cs
+
+# Environment and sensitive files
+.env
+.env.local
+secrets.json
+
+# Tooling generated files
+*.generated.cs
+*.generated.ts
+coverage/
