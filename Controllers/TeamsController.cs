@@ -20,7 +20,6 @@ public class TeamsController : ControllerBase
     {
         return await _context.Teams
             .Include(t => t.Players) // Include related players
-            .ThenInclude(p => p.Stats) // Include player stats
             .ToListAsync();
     }
 
@@ -65,7 +64,6 @@ public class TeamsController : ControllerBase
     {
         var team = await _context.Teams
             .Include(t => t.Players)
-            .ThenInclude(p => p.Stats)
             .FirstOrDefaultAsync(t => t.Id == id);
 
         if (team == null)

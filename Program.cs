@@ -1,11 +1,17 @@
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// Add services to the container
 builder.Services.AddDbContext<ValorantDbContext>(options =>
-    options.UseInMemoryDatabase("ValorantDb")); // Using In-Memory DB for development
-builder.Services.AddControllers();
+    options.UseInMemoryDatabase("ValorantDb").EnableSensitiveDataLogging());
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.WriteIndented = true;
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHttpClient<VlrScraperService>();
 builder.Services.AddScoped<VlrScraperService>();
@@ -21,6 +27,7 @@ using (var scope = app.Services.CreateScope())
     DbSeeder.Seed(context);
 }
 
+// Configure middleware
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

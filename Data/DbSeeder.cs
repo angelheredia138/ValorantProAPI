@@ -4,38 +4,38 @@ public static class DbSeeder
     {
         if (!context.Teams.Any())
         {
-            // Create the team
-            var team1 = new Team 
-            { 
-                Id = 1, 
-                Name = "Team Alpha", 
-                Region = "Americas", 
-                LogoUrl = "alpha.png" 
+            var team1 = new Team
+            {
+                Id = 1,
+                Name = "Team Alpha",
+                Region = "Americas",
+                LogoUrl = "alpha.png"
             };
 
-            // Create the player, explicitly setting TeamId
             var player1 = new Player
             {
                 Id = 1,
                 Name = "Player A",
-                Role = "Duelist",
-                Age = 25,
-                TeamId = team1.Id, // Explicitly set TeamId
-                Team = team1,      // Also set the navigation property
-                Stats = new PlayerStats
-                {
-                    Kills = 100,
-                    Deaths = 50,
-                    Assists = 30,
-                    MatchesPlayed = 20
-                }
+                RealName = "Alex Smith", // New property
+                ProfileImageUrl = "https://example.com/player-a.png", // New property
+                TeamId = team1.Id,
+                Team = team1
             };
 
-            // Add the team and player to the context
+            var player2 = new Player
+            {
+                Id = 2,
+                Name = "Player B",
+                RealName = "Jamie Doe",
+                ProfileImageUrl = "https://example.com/player-b.png",
+                TeamId = team1.Id,
+                Team = team1
+            };
+
             context.Teams.Add(team1);
             context.Players.Add(player1);
+            context.Players.Add(player2);
 
-            // Save changes
             context.SaveChanges();
         }
     }

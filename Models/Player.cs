@@ -1,10 +1,13 @@
+using System.Text.Json.Serialization;
+
 public class Player
 {
     public int Id { get; set; }
-    public required string Name { get; set; }
-    public required string Role { get; set; }
-    public int Age { get; set; }
-    public required int TeamId { get; set; }
-    public required Team Team { get; set; }
-    public required PlayerStats Stats { get; set; }
+    public string Name { get; set; } = null!;
+    public string? RealName { get; set; }
+    public string? ProfileImageUrl { get; set; }
+    public int TeamId { get; set; }
+
+    [JsonIgnore] // Prevent cyclic reference during serialization
+    public Team Team { get; set; } = null!;
 }

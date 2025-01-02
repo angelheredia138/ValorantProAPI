@@ -1,13 +1,16 @@
 using HtmlAgilityPack;
 using System.Net.Http;
+using Microsoft.EntityFrameworkCore;
 
 public class VlrScraperService
 {
     private readonly HttpClient _httpClient;
+    private readonly ValorantDbContext _context;
 
-    public VlrScraperService(HttpClient httpClient)
+    public VlrScraperService(HttpClient httpClient, ValorantDbContext context)
     {
         _httpClient = httpClient;
+        _context = context;
     }
 
     public async Task<List<Team>> ScrapeTeamsFromVlr(string region)
@@ -56,23 +59,101 @@ public class VlrScraperService
 
             if (nameNode != null && logoNode != null)
             {
-                var teamName = nameNode.InnerText.Trim();
-                if (!seenTeamNames.Contains(teamName))
+                var href = nameNode.GetAttributeValue("href", "").Trim();
+                var teamIdMatch = System.Text.RegularExpressions.Regex.Match(href, @"/team/(\d+)/");
+                int teamId = teamIdMatch.Success ? int.Parse(teamIdMatch.Groups[1].Value) : 0;
+
+                var team = new Team
                 {
-                    seenTeamNames.Add(teamName); // Add the team name to the set
+                    Id = teamId, // Save the parsed team ID
+                    Name = nameNode.InnerText.Trim(),
+                    LogoUrl = logoNode.GetAttributeValue("src", "").Trim(),
+                    Region = region
+                };
 
-                    var team = new Team
-                    {
-                        Name = teamName,
-                        LogoUrl = logoNode.GetAttributeValue("src", "").Trim(),
-                        Region = region // Assign the region dynamically
-                    };
-
+                if (!seenTeamNames.Contains(team.Name))
+                {
+                    seenTeamNames.Add(team.Name);
                     teams.Add(team);
                 }
             }
         }
-
         return teams;
     }
+    public async Task<List<Player>> ScrapePlayersFromTeam(int teamId)
+    {
+        // Fetch the team from the database to ensure it's tracked
+        var team = await _context.Teams.FirstOrDefaultAsync(t => t.Id == teamId);
+        if (team == null)
+        {
+            throw new Exception($"Team with ID {teamId} not found in the database.");
+        }
+
+        // Construct the team page URL
+        var url = $"https://www.vlr.gg/team/{teamId}";
+
+        // Fetch the HTML content from the team page
+        var html = await _httpClient.GetStringAsync(url);
+
+        // Parse the HTML content using HtmlAgilityPack
+        var htmlDoc = new HtmlDocument();
+        htmlDoc.LoadHtml(html);
+
+        // Find the section of the HTML containing player information
+        var playerNodes = htmlDoc.DocumentNode.SelectNodes("//div[contains(@class, 'team-roster-item')]");
+        if (playerNodes == null)
+        {
+            return new List<Player>(); // Return an empty list if no players are found
+        }
+
+        // Extract player information and convert to Player objects
+        var players = new List<Player>();
+        var existingPlayerIds = new HashSet<int>(); // Track player IDs to avoid duplicates
+
+        foreach (var playerNode in playerNodes)
+        {
+            var linkNode = playerNode.SelectSingleNode(".//a");
+            var aliasNode = playerNode.SelectSingleNode(".//div[contains(@class, 'team-roster-item-name-alias')]");
+            var realNameNode = playerNode.SelectSingleNode(".//div[contains(@class, 'team-roster-item-name-real')]");
+            var imgNode = playerNode.SelectSingleNode(".//img");
+
+            if (linkNode != null && aliasNode != null)
+            {
+                // Extract player ID from the href
+                var href = linkNode.GetAttributeValue("href", "").Trim();
+                var playerIdMatch = System.Text.RegularExpressions.Regex.Match(href, @"/player/(\d+)/");
+                if (!playerIdMatch.Success) continue;
+
+                int playerId = int.Parse(playerIdMatch.Groups[1].Value);
+                if (existingPlayerIds.Contains(playerId)) continue; // Skip duplicates
+                existingPlayerIds.Add(playerId);
+
+                // Extract image URL
+                var imageUrl = imgNode?.GetAttributeValue("src", "").Trim();
+
+                // Create a new Player object with additional fields
+                var player = new Player
+                {
+                    Id = playerId,
+                    Name = aliasNode.InnerText.Trim(),
+                    RealName = realNameNode?.InnerText.Trim() ?? "Unknown",
+                    ProfileImageUrl = string.IsNullOrEmpty(imageUrl) ? null : imageUrl.StartsWith("//") ? "https:" + imageUrl : imageUrl,
+                    TeamId = teamId
+                };
+
+                // Check if the player already exists in the database
+                if (!_context.Players.Any(p => p.Id == player.Id))
+                {
+                    players.Add(player);
+                }
+            }
+        }
+
+        // Add new players to the database
+        _context.Players.AddRange(players);
+        await _context.SaveChangesAsync();
+
+        return players;
+    }
+
 }
