@@ -116,6 +116,9 @@ public class VlrScraperService
             var aliasNode = playerNode.SelectSingleNode(".//div[contains(@class, 'team-roster-item-name-alias')]");
             var realNameNode = playerNode.SelectSingleNode(".//div[contains(@class, 'team-roster-item-name-real')]");
             var imgNode = playerNode.SelectSingleNode(".//img");
+            var flagNode = aliasNode?.SelectSingleNode(".//i[contains(@class, 'flag')]");
+            var captainNode = aliasNode?.SelectSingleNode(".//i[contains(@class, 'fa-star')]");
+            var roleNode = playerNode.SelectSingleNode(".//div[contains(@class, 'wf-tag mod-light team-roster-item-name-role')]");
 
             if (linkNode != null && aliasNode != null)
             {
@@ -131,6 +134,9 @@ public class VlrScraperService
                 // Extract image URL
                 var imageUrl = imgNode?.GetAttributeValue("src", "").Trim();
 
+                // Determine if this is a staff member
+                var isStaff = roleNode != null;
+
                 // Create a new Player object with additional fields
                 var player = new Player
                 {
@@ -138,6 +144,10 @@ public class VlrScraperService
                     Name = aliasNode.InnerText.Trim(),
                     RealName = realNameNode?.InnerText.Trim() ?? "Unknown",
                     ProfileImageUrl = string.IsNullOrEmpty(imageUrl) ? null : imageUrl.StartsWith("//") ? "https:" + imageUrl : imageUrl,
+                    IsCaptain = captainNode != null,
+                    Country = flagNode?.GetAttributeValue("class", "").Split(' ').LastOrDefault()?.Replace("mod-", "") ?? "Unknown",
+                    IsStaff = isStaff,
+                    RoleDescription = isStaff ? roleNode.InnerText.Trim() : null,
                     TeamId = teamId
                 };
 
