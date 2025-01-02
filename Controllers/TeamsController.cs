@@ -24,14 +24,21 @@ public class TeamsController : ControllerBase
             .ToListAsync();
     }
 
-    // GET: api/Teams/scrape
-    [HttpGet("scrape")]
-    public async Task<ActionResult<IEnumerable<Team>>> ScrapeTeams()
+    // GET: api/Teams/scrape/{region}
+    [HttpGet("scrape/{region}")]
+    public async Task<ActionResult<IEnumerable<Team>>> ScrapeTeams(string region)
     {
+        // Validate the region parameter
+        var validRegions = new List<string> { "emea", "pacific", "americas", "china" };
+        if (!validRegions.Contains(region.ToLower()))
+        {
+            return BadRequest($"Invalid region. Valid regions are: {string.Join(", ", validRegions)}");
+        }
+
         try
         {
-            // Use the scraper service to get teams
-            var scrapedTeams = await _scraperService.ScrapeTeamsFromVlr();
+            // Use the scraper service to get teams for the specified region
+            var scrapedTeams = await _scraperService.ScrapeTeamsFromVlr(region);
 
             // Optionally save the scraped teams to the database
             foreach (var team in scrapedTeams)
@@ -48,7 +55,7 @@ public class TeamsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Error scraping teams: {ex.Message}");
+            return StatusCode(500, $"Error scraping teams for {region}: {ex.Message}");
         }
     }
 
