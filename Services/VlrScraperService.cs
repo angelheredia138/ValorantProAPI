@@ -257,14 +257,36 @@ public class VlrScraperService
                 var stage = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-event')]")?.InnerText.Trim()
                     .Replace("\n", "").Replace("\t", "").Replace("&sdot;", "·").Split('·').LastOrDefault()?.Trim() ?? "Unknown Stage";
                 var teamName = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-team') and not(contains(@class, 'mod-right'))]/span[@class='m-item-team-name']")?.InnerText.Trim() ?? "Unknown Team";
-                var opponentName = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-team mod-right')]/span[@class='m-item-team-name']")?.InnerText.Trim() ?? "Unknown Opponent";
+
+                // Extract opponent name
+                var opponentNode = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-team') and contains(@class, 'mod-right')]/span[contains(@class, 'm-item-team-name')]");
+                string opponentName = opponentNode?.InnerText.Trim() ?? "Unknown Opponent";
+
+                // Debugging: Log the parent node if the opponentNode is not found
+                if (opponentNode == null)
+                {
+                    var opponentParent = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-team') and contains(@class, 'mod-right')]");
+                    Console.WriteLine($"Opponent Parent HTML: {opponentParent?.OuterHtml ?? "Not Found"}");
+                }
+
+
+                // Fallback: Log opponent's div if name extraction fails
+                if (opponentName == "Unknown Opponent")
+                {
+                    var opponentFallback = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-team mod-right')]");
+                    opponentName = opponentFallback?.InnerText.Trim() ?? "Unknown Opponent";
+
+                    // Debugging log
+                    Console.WriteLine($"Opponent Div HTML: {opponentFallback?.OuterHtml ?? "Not Found"}");
+                }
+
+                // Clean opponent name
+                opponentName = HtmlEntity.DeEntitize(opponentName);
+
                 var result = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-result')]")?.InnerText.Trim()
                     .Replace("\n", "").Replace("\t", "").Replace(" ", "") ?? "Unknown Result";
                 var date = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-date')]/div")?.InnerText.Trim() ?? "Unknown Date";
                 var time = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-date')]/following-sibling::text()")?.InnerText.Trim() ?? "Unknown Time";
-
-                // Clean opponent name if it contains HTML entities
-                opponentName = HtmlEntity.DeEntitize(opponentName);
 
                 playerStats.LastMatches.Add(new MatchResult
                 {
