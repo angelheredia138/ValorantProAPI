@@ -165,5 +165,108 @@ public class VlrScraperService
 
         return players;
     }
+    public async Task<PlayerStats> ScrapePlayerStats(int playerId)
+    {
+        var url = $"https://www.vlr.gg/player/{playerId}";
+
+        var html = await _httpClient.GetStringAsync(url);
+        var htmlDoc = new HtmlDocument();
+        htmlDoc.LoadHtml(html);
+
+        var playerStats = new PlayerStats { PlayerId = playerId };
+
+        // Extract social media handles
+        var socialMediaNodes = htmlDoc.DocumentNode.SelectNodes("//a[contains(@href, 'x.com') or contains(@href, 'twitch.tv')]");
+        if (socialMediaNodes != null)
+        {
+            foreach (var node in socialMediaNodes)
+            {
+                var handle = node.GetAttributeValue("href", "").Trim();
+                if (!string.IsNullOrEmpty(handle))
+                {
+                    playerStats.SocialMediaHandles.Add(handle);
+                }
+            }
+        }
+
+        // Extract current team
+        var currentTeamNode = htmlDoc.DocumentNode.SelectSingleNode("//h2[contains(text(),'Current Teams')]/following-sibling::div/a[contains(@class, 'wf-module-item')]");
+        if (currentTeamNode != null)
+        {
+            var teamName = currentTeamNode.SelectSingleNode(".//div[contains(@style, 'font-weight: 500')]")?.InnerText.Trim();
+            var joinDate = currentTeamNode.SelectSingleNode(".//div[contains(@class, 'ge-text-light') and contains(text(),'joined')]")?.InnerText.Trim();
+            if (!string.IsNullOrEmpty(teamName))
+            {
+                playerStats.CurrentTeam = $"{teamName} ({joinDate})";
+            }
+        }
+
+        // Extract past teams
+        var pastTeamNodes = htmlDoc.DocumentNode.SelectNodes("//h2[contains(text(),'Past Teams')]/following-sibling::div/a[contains(@class, 'wf-module-item')]");
+        if (pastTeamNodes != null)
+        {
+            foreach (var node in pastTeamNodes)
+            {
+                var teamName = node.SelectSingleNode(".//div[contains(@style, 'font-weight: 500')]")?.InnerText.Trim();
+                var durationNode = node.SelectNodes(".//div[contains(@class, 'ge-text-light')]");
+                string duration = null;
+
+                if (durationNode != null)
+                {
+                    // Extract the duration if it exists in any of the nodes
+                    foreach (var subNode in durationNode)
+                    {
+                        var text = subNode.InnerText.Trim();
+                        if (!string.IsNullOrEmpty(text))
+                        {
+                            if (text.Contains("–"))
+                            {
+                                duration = text; // Found a "Start – End" duration
+                                break;
+                            }
+                            else if (text.StartsWith("left in", StringComparison.OrdinalIgnoreCase))
+                            {
+                                duration = text; // Found a "Left in X" duration
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(teamName))
+                {
+                    var fullDuration = !string.IsNullOrEmpty(duration) ? duration : "Unknown Duration";
+                    playerStats.PastTeams.Add($"{teamName} ({fullDuration})");
+                }
+            }
+        }
+
+        // Extract total winnings
+        var winningsNode = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(text(),'Total Winnings')]/following-sibling::span");
+        if (winningsNode != null)
+        {
+            playerStats.TotalWinnings = winningsNode.InnerText.Trim();
+        }
+
+        // Extract last matches
+        var matchNodes = htmlDoc.DocumentNode.SelectNodes("//h2[contains(text(),'Recent Results')]/following-sibling::div/a[contains(@class, 'm-item')]");
+        if (matchNodes != null)
+        {
+            foreach (var matchNode in matchNodes.Take(3)) // Last three matches
+            {
+                var match = new MatchResult
+                {
+                    EventName = matchNode.SelectSingleNode(".//div[contains(@style, 'font-weight: 700')]")?.InnerText.Trim() ?? "Unknown",
+                    Date = matchNode.SelectSingleNode(".//div[@class='m-item-date']//div")?.InnerText.Trim() ?? "Unknown",
+                    Result = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-result')]")?.InnerText.Trim() ?? "Unknown",
+                    Opponent = matchNode.SelectSingleNode(".//div[@class='m-item-team mod-right']//span")?.InnerText.Trim() ?? "Unknown"
+                };
+
+                playerStats.LastMatches.Add(match);
+            }
+        }
+
+        return playerStats;
+    }
 
 }
