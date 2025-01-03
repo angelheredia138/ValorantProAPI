@@ -213,7 +213,6 @@ public class VlrScraperService
 
                 if (durationNode != null)
                 {
-                    // Extract the duration if it exists in any of the nodes
                     foreach (var subNode in durationNode)
                     {
                         var text = subNode.InnerText.Trim();
@@ -221,12 +220,12 @@ public class VlrScraperService
                         {
                             if (text.Contains("–"))
                             {
-                                duration = text; // Found a "Start – End" duration
+                                duration = text;
                                 break;
                             }
                             else if (text.StartsWith("left in", StringComparison.OrdinalIgnoreCase))
                             {
-                                duration = text; // Found a "Left in X" duration
+                                duration = text;
                                 break;
                             }
                         }
@@ -249,20 +248,33 @@ public class VlrScraperService
         }
 
         // Extract last matches
-        var matchNodes = htmlDoc.DocumentNode.SelectNodes("//h2[contains(text(),'Recent Results')]/following-sibling::div/a[contains(@class, 'm-item')]");
+        var matchNodes = htmlDoc.DocumentNode.SelectNodes("//h2[contains(text(),'Recent Results')]/following-sibling::div//a[contains(@class, 'm-item')]");
         if (matchNodes != null)
         {
             foreach (var matchNode in matchNodes.Take(3)) // Last three matches
             {
-                var match = new MatchResult
-                {
-                    EventName = matchNode.SelectSingleNode(".//div[contains(@style, 'font-weight: 700')]")?.InnerText.Trim() ?? "Unknown",
-                    Date = matchNode.SelectSingleNode(".//div[@class='m-item-date']//div")?.InnerText.Trim() ?? "Unknown",
-                    Result = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-result')]")?.InnerText.Trim() ?? "Unknown",
-                    Opponent = matchNode.SelectSingleNode(".//div[@class='m-item-team mod-right']//span")?.InnerText.Trim() ?? "Unknown"
-                };
+                var eventName = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-event')]//div[contains(@style, 'font-weight: 700')]")?.InnerText.Trim() ?? "Unknown Event";
+                var stage = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-event')]")?.InnerText.Trim()
+                    .Replace("\n", "").Replace("\t", "").Replace("&sdot;", "·").Split('·').LastOrDefault()?.Trim() ?? "Unknown Stage";
+                var teamName = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-team') and not(contains(@class, 'mod-right'))]/span[@class='m-item-team-name']")?.InnerText.Trim() ?? "Unknown Team";
+                var opponentName = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-team mod-right')]/span[@class='m-item-team-name']")?.InnerText.Trim() ?? "Unknown Opponent";
+                var result = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-result')]")?.InnerText.Trim()
+                    .Replace("\n", "").Replace("\t", "").Replace(" ", "") ?? "Unknown Result";
+                var date = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-date')]/div")?.InnerText.Trim() ?? "Unknown Date";
+                var time = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-date')]/following-sibling::text()")?.InnerText.Trim() ?? "Unknown Time";
 
-                playerStats.LastMatches.Add(match);
+                // Clean opponent name if it contains HTML entities
+                opponentName = HtmlEntity.DeEntitize(opponentName);
+
+                playerStats.LastMatches.Add(new MatchResult
+                {
+                    EventName = eventName,
+                    Stage = stage,
+                    TeamName = teamName,
+                    Opponent = opponentName,
+                    Result = result,
+                    Date = $"{date} {time}"
+                });
             }
         }
 
