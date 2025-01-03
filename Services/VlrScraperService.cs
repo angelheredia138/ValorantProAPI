@@ -167,7 +167,7 @@ public class VlrScraperService
     }
     public async Task<PlayerStats> ScrapePlayerStats(int playerId)
     {
-        var url = $"https://www.vlr.gg/player/{playerId}";
+        var url = $"https://www.vlr.gg/player/{playerId}/?timespan=90d";
 
         var html = await _httpClient.GetStringAsync(url);
         var htmlDoc = new HtmlDocument();
@@ -297,6 +297,32 @@ public class VlrScraperService
                     Result = result,
                     Date = $"{date} {time}"
                 });
+            }
+        }
+
+        // Extract agent stats
+        var agentRows = htmlDoc.DocumentNode.SelectNodes("//table[@class='wf-table']//tbody/tr");
+        if (agentRows != null)
+        {
+            foreach (var row in agentRows.Take(3)) // Only take the top 3 agents
+            {
+                var agentStats = new AgentStats
+                {
+                    AgentName = row.SelectSingleNode(".//img")?.GetAttributeValue("alt", "Unknown") ?? "Unknown",
+                    Usage = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][1]")?.InnerText.Trim() ?? "0%",
+                    RoundsPlayed = int.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][2]")?.InnerText.Trim() ?? "0"),
+                    Rating = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-center')]")?.InnerText.Trim() ?? "0"),
+                    ACS = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][3]")?.InnerText.Trim() ?? "0"),
+                    KD = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][4]")?.InnerText.Trim() ?? "0"),
+                    ADR = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][5]")?.InnerText.Trim() ?? "0"),
+                    KAST = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][6]")?.InnerText.Trim() ?? "0%",
+                    KPR = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][7]")?.InnerText.Trim() ?? "0"),
+                    APR = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][8]")?.InnerText.Trim() ?? "0"),
+                    FKPR = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][9]")?.InnerText.Trim() ?? "0"),
+                    FDPR = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][10]")?.InnerText.Trim() ?? "0"),
+                };
+
+                playerStats.TopAgents.Add(agentStats);
             }
         }
 

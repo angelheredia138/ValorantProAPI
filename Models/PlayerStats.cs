@@ -6,4 +6,5 @@ public class PlayerStats
     public string TotalWinnings { get; set; } = "0";
     public List<string> SocialMediaHandles { get; set; } = new();
     public List<MatchResult> LastMatches { get; set; } = new();
+    public List<AgentStats> TopAgents { get; set; } = new(); // New property for agent stats
 }
