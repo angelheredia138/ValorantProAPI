@@ -14,15 +14,6 @@ public class TeamsController : ControllerBase
         _scraperService = scraperService;
     }
 
-    // GET: api/Teams
-    [HttpGet]
-    public async Task<ActionResult<IEnumerable<Team>>> GetTeams()
-    {
-        return await _context.Teams
-            .Include(t => t.Players) // Include related players
-            .ToListAsync();
-    }
-
     // GET: api/Teams/scrape/{region}
     [HttpGet("scrape/{region}")]
     public async Task<ActionResult<IEnumerable<Team>>> ScrapeTeams(string region)
@@ -57,73 +48,42 @@ public class TeamsController : ControllerBase
             return StatusCode(500, $"Error scraping teams for {region}: {ex.Message}");
         }
     }
-
-    // GET: api/Teams/{id}
-    [HttpGet("{id}")]
-    public async Task<ActionResult<Team>> GetTeam(int id)
+    // GET: api/Teams/scrape/all
+    [HttpGet("scrape/all")]
+    public async Task<ActionResult<IEnumerable<Team>>> ScrapeAllRegions()
     {
-        var team = await _context.Teams
-            .Include(t => t.Players)
-            .FirstOrDefaultAsync(t => t.Id == id);
-
-        if (team == null)
-        {
-            return NotFound();
-        }
-
-        return team;
-    }
-
-    // POST: api/Teams
-    [HttpPost]
-    public async Task<ActionResult<Team>> PostTeam(Team team)
-    {
-        _context.Teams.Add(team);
-        await _context.SaveChangesAsync();
-
-        return CreatedAtAction(nameof(GetTeam), new { id = team.Id }, team);
-    }
-
-    // PUT: api/Teams/{id}
-    [HttpPut("{id}")]
-    public async Task<IActionResult> PutTeam(int id, Team team)
-    {
-        if (id != team.Id)
-        {
-            return BadRequest();
-        }
-
-        _context.Entry(team).State = EntityState.Modified;
+        // Define the list of regions to scrape
+        var regions = new List<string> { "emea", "pacific", "americas", "china" };
+        var allScrapedTeams = new List<Team>();
 
         try
         {
-            await _context.SaveChangesAsync();
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            if (!_context.Teams.Any(e => e.Id == id))
+            foreach (var region in regions)
             {
-                return NotFound();
+                // Scrape teams for the current region
+                var scrapedTeams = await _scraperService.ScrapeTeamsFromVlr(region);
+
+                // Add new teams to the database and the response list
+                foreach (var team in scrapedTeams)
+                {
+                    if (!_context.Teams.Any(t => t.Name == team.Name))
+                    {
+                        _context.Teams.Add(team);
+                        allScrapedTeams.Add(team);
+                    }
+                }
             }
-            throw;
+
+            // Save all changes to the database at once
+            await _context.SaveChangesAsync();
+
+            return Ok(allScrapedTeams); // Return all scraped teams
         }
-
-        return NoContent();
-    }
-
-    // DELETE: api/Teams/{id}
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteTeam(int id)
-    {
-        var team = await _context.Teams.FindAsync(id);
-        if (team == null)
+        catch (Exception ex)
         {
-            return NotFound();
+            return StatusCode(500, $"Error scraping teams from all regions: {ex.Message}");
         }
-
-        _context.Teams.Remove(team);
-        await _context.SaveChangesAsync();
-
-        return NoContent();
     }
+
+
 }
