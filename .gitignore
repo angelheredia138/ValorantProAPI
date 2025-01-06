@@ -63,3 +63,5 @@ secrets.json
 *.generated.cs
 *.generated.ts
 coverage/
+
+/publish

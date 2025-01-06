@@ -52,12 +52,20 @@ public class TeamsController : ControllerBase
     [HttpGet("scrape/all")]
     public async Task<ActionResult<IEnumerable<Team>>> ScrapeAllRegions()
     {
-        // Define the list of regions to scrape
-        var regions = new List<string> { "emea", "pacific", "americas", "china" };
-        var allScrapedTeams = new List<Team>();
-
         try
         {
+            // Check if there are already teams in the database
+            var existingTeams = await _context.Teams.ToListAsync();
+            if (existingTeams.Any())
+            {
+                Console.WriteLine("Returning teams from database cache.");
+                return Ok(existingTeams); // Return cached teams
+            }
+
+            // If no teams are in the database, proceed with scraping
+            var regions = new List<string> { "emea", "pacific", "americas", "china" };
+            var allScrapedTeams = new List<Team>();
+
             foreach (var region in regions)
             {
                 // Scrape teams for the current region
@@ -84,6 +92,5 @@ public class TeamsController : ControllerBase
             return StatusCode(500, $"Error scraping teams from all regions: {ex.Message}");
         }
     }
-
 
 }

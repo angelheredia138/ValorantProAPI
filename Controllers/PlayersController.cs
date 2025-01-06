@@ -46,7 +46,15 @@ public class PlayersController : ControllerBase
     {
         try
         {
-            // Retrieve all team IDs from the database
+            // Check if players already exist in the database
+            var existingPlayers = await _context.Players.ToListAsync();
+            if (existingPlayers.Any())
+            {
+                Console.WriteLine("Returning players from database cache.");
+                return Ok(existingPlayers); // Return cached players
+            }
+
+            // If no players are in the database, proceed with scraping
             var teams = await _context.Teams.ToListAsync();
 
             if (!teams.Any())
@@ -88,8 +96,7 @@ public class PlayersController : ControllerBase
             // Save all changes to the database at once
             await _context.SaveChangesAsync();
 
-            // Return all scraped players (including duplicates)
-            return Ok(allScrapedPlayers);
+            return Ok(allScrapedPlayers); // Return all scraped players
         }
         catch (Exception ex)
         {
