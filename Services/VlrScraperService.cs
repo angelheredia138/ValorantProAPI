@@ -12,6 +12,18 @@ public class VlrScraperService
         _httpClient = httpClient;
         _context = context;
     }
+    private string NormalizeImageUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url))
+            return null;
+
+        // Add "https:" if the URL starts with "//"
+        if (url.StartsWith("//"))
+            return "https:" + url;
+
+        return url; // Return the original URL if no changes are needed
+    }
+
 
     public async Task<List<Team>> ScrapeTeamsFromVlr(string region)
     {
@@ -67,7 +79,7 @@ public class VlrScraperService
                 {
                     Id = teamId, // Save the parsed team ID
                     Name = nameNode.InnerText.Trim(),
-                    LogoUrl = logoNode.GetAttributeValue("src", "").Trim(),
+                    LogoUrl = NormalizeImageUrl(logoNode.GetAttributeValue("src", "").Trim()),
                     Region = region
                 };
 
@@ -133,6 +145,7 @@ public class VlrScraperService
 
                 // Extract image URL
                 var imageUrl = imgNode?.GetAttributeValue("src", "").Trim();
+                var normalizedImageUrl = NormalizeImageUrl(imageUrl);
 
                 // Determine if this is a staff member
                 var isStaff = roleNode != null;
@@ -143,7 +156,7 @@ public class VlrScraperService
                     Id = playerId,
                     Name = aliasNode.InnerText.Trim(),
                     RealName = realNameNode?.InnerText.Trim() ?? "Unknown",
-                    ProfileImageUrl = string.IsNullOrEmpty(imageUrl) ? null : imageUrl.StartsWith("//") ? "https:" + imageUrl : imageUrl,
+                    ProfileImageUrl = normalizedImageUrl, // Use normalized image URL
                     IsCaptain = captainNode != null,
                     Country = flagNode?.GetAttributeValue("class", "").Split(' ').LastOrDefault()?.Replace("mod-", "") ?? "Unknown",
                     IsStaff = isStaff,
