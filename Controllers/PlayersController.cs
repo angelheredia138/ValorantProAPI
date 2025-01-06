@@ -20,25 +20,38 @@ public class PlayersController : ControllerBase
     {
         try
         {
-            var players = await _scraperService.ScrapePlayersFromTeam(teamId);
+            // Check if players for the specified team already exist in the database
+            var existingPlayers = await _context.Players.Where(p => p.TeamId == teamId).ToListAsync();
 
-            foreach (var player in players)
+            if (existingPlayers.Any())
             {
-                if (!_context.Players.Any(p => p.Name == player.Name && p.TeamId == player.TeamId))
+                Console.WriteLine($"Returning cached players for team ID: {teamId}");
+                return Ok(existingPlayers); // Return cached players
+            }
+
+            // If no players are in the database for the team, proceed with scraping
+            var scrapedPlayers = await _scraperService.ScrapePlayersFromTeam(teamId);
+
+            foreach (var player in scrapedPlayers)
+            {
+                // Save new players to the database
+                if (!_context.Players.Any(p => p.Id == player.Id))
                 {
                     _context.Players.Add(player);
                 }
             }
 
+            // Save changes to the database
             await _context.SaveChangesAsync();
 
-            return Ok(players);
+            return Ok(scrapedPlayers); // Return the newly scraped players
         }
         catch (Exception ex)
         {
             return StatusCode(500, $"Error scraping players for team {teamId}: {ex.Message}");
         }
     }
+
 
     // GET: api/Players/scrape/all
     [HttpGet("scrape/all")]
@@ -93,5 +106,6 @@ public class PlayersController : ControllerBase
             return StatusCode(500, $"Error scraping players from all teams: {ex.Message}");
         }
     }
+
 }
 
