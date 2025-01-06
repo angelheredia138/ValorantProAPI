@@ -48,21 +48,14 @@ public class TeamsController : ControllerBase
             return StatusCode(500, $"Error scraping teams for {region}: {ex.Message}");
         }
     }
+
     // GET: api/Teams/scrape/all
     [HttpGet("scrape/all")]
     public async Task<ActionResult<IEnumerable<Team>>> ScrapeAllRegions()
     {
         try
         {
-            // Check if there are already teams in the database
-            var existingTeams = await _context.Teams.ToListAsync();
-            if (existingTeams.Any())
-            {
-                Console.WriteLine("Returning teams from database cache.");
-                return Ok(existingTeams); // Return cached teams
-            }
-
-            // If no teams are in the database, proceed with scraping
+            // Define regions to scrape
             var regions = new List<string> { "emea", "pacific", "americas", "china" };
             var allScrapedTeams = new List<Team>();
 
@@ -71,21 +64,30 @@ public class TeamsController : ControllerBase
                 // Scrape teams for the current region
                 var scrapedTeams = await _scraperService.ScrapeTeamsFromVlr(region);
 
-                // Add new teams to the database and the response list
                 foreach (var team in scrapedTeams)
                 {
-                    if (!_context.Teams.Any(t => t.Name == team.Name))
+                    // Check if team already exists
+                    var existingTeam = await _context.Teams.FirstOrDefaultAsync(t => t.Name == team.Name);
+                    if (existingTeam != null)
                     {
-                        _context.Teams.Add(team);
-                        allScrapedTeams.Add(team);
+                        // Update existing team
+                        existingTeam.Region = team.Region;
+                        existingTeam.LogoUrl = team.LogoUrl;
                     }
+                    else
+                    {
+                        // Add new team
+                        _context.Teams.Add(team);
+                    }
+
+                    allScrapedTeams.Add(team);
                 }
             }
 
-            // Save all changes to the database at once
+            // Save all changes to the database
             await _context.SaveChangesAsync();
 
-            return Ok(allScrapedTeams); // Return all scraped teams
+            return Ok(allScrapedTeams);
         }
         catch (Exception ex)
         {

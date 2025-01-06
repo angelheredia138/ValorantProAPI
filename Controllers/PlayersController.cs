@@ -46,20 +46,12 @@ public class PlayersController : ControllerBase
     {
         try
         {
-            // Check if players already exist in the database
-            var existingPlayers = await _context.Players.ToListAsync();
-            if (existingPlayers.Any())
-            {
-                Console.WriteLine("Returning players from database cache.");
-                return Ok(existingPlayers); // Return cached players
-            }
-
-            // If no players are in the database, proceed with scraping
+            // Retrieve all teams from the database
             var teams = await _context.Teams.ToListAsync();
 
             if (!teams.Any())
             {
-                return BadRequest("No teams found in the database. Please add teams first.");
+                return BadRequest("No teams found in the database. Please scrape teams first.");
             }
 
             var allScrapedPlayers = new List<Player>();
@@ -68,7 +60,6 @@ public class PlayersController : ControllerBase
             {
                 try
                 {
-                    // Log the team being processed
                     Console.WriteLine($"Scraping players for team: {team.Name} (ID: {team.Id})");
 
                     // Scrape players for the current team
@@ -88,7 +79,6 @@ public class PlayersController : ControllerBase
                 }
                 catch (Exception ex)
                 {
-                    // Log errors for individual teams and continue with others
                     Console.WriteLine($"Error scraping players for team {team.Name} (ID: {team.Id}): {ex.Message}");
                 }
             }
@@ -96,13 +86,12 @@ public class PlayersController : ControllerBase
             // Save all changes to the database at once
             await _context.SaveChangesAsync();
 
-            return Ok(allScrapedPlayers); // Return all scraped players
+            return Ok(allScrapedPlayers);
         }
         catch (Exception ex)
         {
             return StatusCode(500, $"Error scraping players from all teams: {ex.Message}");
         }
     }
-
 }
 
