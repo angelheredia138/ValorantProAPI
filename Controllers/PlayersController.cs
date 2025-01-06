@@ -13,55 +13,75 @@ public class PlayersController : ControllerBase
         _context = context;
         _scraperService = scraperService;
     }
+    private async Task<bool> IsScrapeRecent(string operation, TimeSpan duration)
+    {
+        var log = await _context.ScrapeLogs.FirstOrDefaultAsync(l => l.Operation == operation);
+        return log != null && DateTime.UtcNow - log.LastRun < duration;
+    }
 
-    // GET: api/Players/scrape/{teamId}
+    private async Task UpdateScrapeLog(string operation)
+    {
+        var log = await _context.ScrapeLogs.FirstOrDefaultAsync(l => l.Operation == operation);
+        if (log == null)
+        {
+            _context.ScrapeLogs.Add(new ScrapeLog { Operation = operation, LastRun = DateTime.UtcNow });
+        }
+        else
+        {
+            log.LastRun = DateTime.UtcNow;
+        }
+        await _context.SaveChangesAsync();
+    }
+
+
     [HttpGet("scrape/{teamId}")]
     public async Task<ActionResult<IEnumerable<Player>>> ScrapePlayers(int teamId)
     {
         try
         {
-            // Check if players for the specified team already exist in the database
-            var existingPlayers = await _context.Players.Where(p => p.TeamId == teamId).ToListAsync();
-
-            if (existingPlayers.Any())
+            // Check if the scrape for this team ID was recently run
+            if (await IsScrapeRecent($"scrape_team_{teamId}", TimeSpan.FromHours(1)))
             {
                 Console.WriteLine($"Returning cached players for team ID: {teamId}");
-                return Ok(existingPlayers); // Return cached players
+                return Ok(await _context.Players.Where(p => p.TeamId == teamId).ToListAsync());
             }
 
-            // If no players are in the database for the team, proceed with scraping
-            var scrapedPlayers = await _scraperService.ScrapePlayersFromTeam(teamId);
+            // Scrape the players for the specified team
+            var players = await _scraperService.ScrapePlayersFromTeam(teamId);
 
-            foreach (var player in scrapedPlayers)
+            foreach (var player in players)
             {
-                // Save new players to the database
-                if (!_context.Players.Any(p => p.Id == player.Id))
+                if (!_context.Players.Any(p => p.Name == player.Name && p.TeamId == player.TeamId))
                 {
                     _context.Players.Add(player);
                 }
             }
 
-            // Save changes to the database
             await _context.SaveChangesAsync();
+            await UpdateScrapeLog($"scrape_team_{teamId}");
 
-            return Ok(scrapedPlayers); // Return the newly scraped players
+            return Ok(players);
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Error scraping players for team {teamId}: {ex.Message}");
+            return StatusCode(500, $"Error scraping players for team ID {teamId}: {ex.Message}");
         }
     }
 
 
-    // GET: api/Players/scrape/all
     [HttpGet("scrape/all")]
     public async Task<ActionResult<IEnumerable<Player>>> ScrapeAllPlayers()
     {
         try
         {
-            // Retrieve all teams from the database
-            var teams = await _context.Teams.ToListAsync();
+            // Check if the scrape-all operation was recently run
+            if (await IsScrapeRecent("scrape_all_players", TimeSpan.FromHours(6)))
+            {
+                Console.WriteLine("Returning cached players.");
+                return Ok(await _context.Players.ToListAsync());
+            }
 
+            var teams = await _context.Teams.ToListAsync();
             if (!teams.Any())
             {
                 return BadRequest("No teams found in the database. Please scrape teams first.");
@@ -71,33 +91,24 @@ public class PlayersController : ControllerBase
 
             foreach (var team in teams)
             {
-                try
+                var players = await _scraperService.ScrapePlayersFromTeam(team.Id);
+
+                foreach (var player in players)
                 {
-                    Console.WriteLine($"Scraping players for team: {team.Name} (ID: {team.Id})");
-
-                    // Scrape players for the current team
-                    var players = await _scraperService.ScrapePlayersFromTeam(team.Id);
-
-                    foreach (var player in players)
+                    if (!_context.Players.Any(p => p.Name == player.Name && p.TeamId == player.TeamId))
                     {
-                        // Add to response collection
-                        allScrapedPlayers.Add(player);
-
-                        // Save new players to the database
-                        if (!_context.Players.Any(p => p.Name == player.Name && p.TeamId == player.TeamId))
-                        {
-                            _context.Players.Add(player);
-                        }
+                        _context.Players.Add(player);
                     }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error scraping players for team {team.Name} (ID: {team.Id}): {ex.Message}");
+
+                    if (!allScrapedPlayers.Any(p => p.Name == player.Name && p.TeamId == player.TeamId))
+                    {
+                        allScrapedPlayers.Add(player);
+                    }
                 }
             }
 
-            // Save all changes to the database at once
             await _context.SaveChangesAsync();
+            await UpdateScrapeLog("scrape_all_players");
 
             return Ok(allScrapedPlayers);
         }
@@ -106,6 +117,5 @@ public class PlayersController : ControllerBase
             return StatusCode(500, $"Error scraping players from all teams: {ex.Message}");
         }
     }
-
 }
 

@@ -13,8 +13,26 @@ public class TeamsController : ControllerBase
         _context = context;
         _scraperService = scraperService;
     }
+    private async Task<bool> IsScrapeRecent(string operation, TimeSpan duration)
+    {
+        var log = await _context.ScrapeLogs.FirstOrDefaultAsync(l => l.Operation == operation);
+        return log != null && DateTime.UtcNow - log.LastRun < duration;
+    }
 
-    // GET: api/Teams/scrape/{region}
+    private async Task UpdateScrapeLog(string operation)
+    {
+        var log = await _context.ScrapeLogs.FirstOrDefaultAsync(l => l.Operation == operation);
+        if (log == null)
+        {
+            _context.ScrapeLogs.Add(new ScrapeLog { Operation = operation, LastRun = DateTime.UtcNow });
+        }
+        else
+        {
+            log.LastRun = DateTime.UtcNow;
+        }
+        await _context.SaveChangesAsync();
+    }
+
     [HttpGet("scrape/{region}")]
     public async Task<ActionResult<IEnumerable<Team>>> ScrapeTeams(string region)
     {
@@ -27,10 +45,16 @@ public class TeamsController : ControllerBase
 
         try
         {
-            // Use the scraper service to get teams for the specified region
+            // Check if the scrape for this region was recently run
+            if (await IsScrapeRecent($"scrape_region_{region.ToLower()}", TimeSpan.FromHours(1)))
+            {
+                Console.WriteLine($"Returning cached teams for region: {region}");
+                return Ok(await _context.Teams.Where(t => t.Region.ToLower() == region.ToLower()).ToListAsync());
+            }
+
+            // Scrape the teams from the region
             var scrapedTeams = await _scraperService.ScrapeTeamsFromVlr(region);
 
-            // Optionally save the scraped teams to the database
             foreach (var team in scrapedTeams)
             {
                 if (!_context.Teams.Any(t => t.Name == team.Name))
@@ -40,43 +64,46 @@ public class TeamsController : ControllerBase
             }
 
             await _context.SaveChangesAsync();
+            await UpdateScrapeLog($"scrape_region_{region.ToLower()}");
 
-            return Ok(scrapedTeams); // Return the scraped teams
+            return Ok(scrapedTeams);
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Error scraping teams for {region}: {ex.Message}");
+            return StatusCode(500, $"Error scraping teams for region {region}: {ex.Message}");
         }
     }
 
-    // GET: api/Teams/scrape/all
+
     [HttpGet("scrape/all")]
     public async Task<ActionResult<IEnumerable<Team>>> ScrapeAllRegions()
     {
         try
         {
-            // Define regions to scrape
+            // Check if the scrape-all operation was recently run
+            if (await IsScrapeRecent("scrape_all_teams", TimeSpan.FromHours(6)))
+            {
+                Console.WriteLine("Returning cached teams.");
+                return Ok(await _context.Teams.ToListAsync());
+            }
+
             var regions = new List<string> { "emea", "pacific", "americas", "china" };
             var allScrapedTeams = new List<Team>();
 
             foreach (var region in regions)
             {
-                // Scrape teams for the current region
                 var scrapedTeams = await _scraperService.ScrapeTeamsFromVlr(region);
 
                 foreach (var team in scrapedTeams)
                 {
-                    // Check if team already exists
                     var existingTeam = await _context.Teams.FirstOrDefaultAsync(t => t.Name == team.Name);
                     if (existingTeam != null)
                     {
-                        // Update existing team
                         existingTeam.Region = team.Region;
                         existingTeam.LogoUrl = team.LogoUrl;
                     }
                     else
                     {
-                        // Add new team
                         _context.Teams.Add(team);
                     }
 
@@ -84,8 +111,8 @@ public class TeamsController : ControllerBase
                 }
             }
 
-            // Save all changes to the database
             await _context.SaveChangesAsync();
+            await UpdateScrapeLog("scrape_all_teams");
 
             return Ok(allScrapedTeams);
         }
@@ -94,5 +121,6 @@ public class TeamsController : ControllerBase
             return StatusCode(500, $"Error scraping teams from all regions: {ex.Message}");
         }
     }
+
 
 }
