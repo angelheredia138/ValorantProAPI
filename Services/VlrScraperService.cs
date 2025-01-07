@@ -187,6 +187,29 @@ public class VlrScraperService
         htmlDoc.LoadHtml(html);
 
         var playerStats = new PlayerStats { PlayerId = playerId };
+        // Extract player image
+        var imageNode = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(@class, 'wf-avatar mod-player')]//img");
+        if (imageNode != null)
+        {
+            var imageUrl = imageNode.GetAttributeValue("src", "").Trim();
+            if (!string.IsNullOrEmpty(imageUrl))
+            {
+                playerStats.PlayerImage = imageUrl.StartsWith("//") ? $"https:{imageUrl}" : imageUrl;
+            }
+        }
+
+        // Extract player real name
+        var realNameNode = htmlDoc.DocumentNode.SelectSingleNode("//h2[contains(@class, 'player-real-name')]");
+        if (realNameNode != null)
+        {
+            playerStats.PlayerRealName = realNameNode.InnerText.Trim();
+        }
+        // Extract country
+        var countryNode = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(@class, 'ge-text-light') and i[contains(@class, 'flag')]]");
+        if (countryNode != null)
+        {
+            playerStats.Country = countryNode.InnerText.Trim();
+        }
 
         // Extract social media handles
         var socialMediaNodes = htmlDoc.DocumentNode.SelectNodes("//a[contains(@href, 'x.com') or contains(@href, 'twitch.tv')]");
