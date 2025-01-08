@@ -204,6 +204,13 @@ public class VlrScraperService
         {
             playerStats.PlayerRealName = realNameNode.InnerText.Trim();
         }
+        // Extract player's username
+        var usernameNode = htmlDoc.DocumentNode.SelectSingleNode("//h1[contains(@class, 'wf-title')]");
+        if (usernameNode != null)
+        {
+            playerStats.Username = usernameNode.InnerText.Trim();
+        }
+
         // Extract country
         var countryNode = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(@class, 'ge-text-light') and i[contains(@class, 'flag')]]/i");
         if (countryNode != null)
