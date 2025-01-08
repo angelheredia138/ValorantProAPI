@@ -6,4 +6,7 @@ public class MatchResult
     public string Opponent { get; set; } = string.Empty;
     public string Result { get; set; } = string.Empty;
     public string Date { get; set; } = string.Empty;
+    public string? MatchImage { get; set; } // Match-related image
+    public string? TeamImage { get; internal set; }
+    public string? OpponentImage { get; internal set; }
 }

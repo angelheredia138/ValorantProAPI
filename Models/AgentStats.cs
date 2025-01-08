@@ -1,6 +1,7 @@
 public class AgentStats
 {
     public string AgentName { get; set; } = "Unknown";
+    public string? AgentImage { get; set; }
     public string Usage { get; set; } = "0%";
     public int RoundsPlayed { get; set; }
     public double Rating { get; set; }

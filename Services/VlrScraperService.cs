@@ -205,10 +205,15 @@ public class VlrScraperService
             playerStats.PlayerRealName = realNameNode.InnerText.Trim();
         }
         // Extract country
-        var countryNode = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(@class, 'ge-text-light') and i[contains(@class, 'flag')]]");
+        var countryNode = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(@class, 'ge-text-light') and i[contains(@class, 'flag')]]/i");
         if (countryNode != null)
         {
-            playerStats.Country = countryNode.InnerText.Trim();
+            // Extract the class attribute and look for the "mod-XX" part
+            var flagClass = countryNode.GetAttributeValue("class", "").Split(' ').FirstOrDefault(c => c.StartsWith("mod-"));
+            if (!string.IsNullOrEmpty(flagClass))
+            {
+                playerStats.Country = flagClass.Replace("mod-", "").ToLower(); // Extract "us" and convert to lowercase
+            }
         }
 
         // Extract social media handles
@@ -225,17 +230,23 @@ public class VlrScraperService
             }
         }
 
-        // Extract current team
+        // Extract current team and image
         var currentTeamNode = htmlDoc.DocumentNode.SelectSingleNode("//h2[contains(text(),'Current Teams')]/following-sibling::div/a[contains(@class, 'wf-module-item')]");
         if (currentTeamNode != null)
         {
             var teamName = currentTeamNode.SelectSingleNode(".//div[contains(@style, 'font-weight: 500')]")?.InnerText.Trim();
-            var joinDate = currentTeamNode.SelectSingleNode(".//div[contains(@class, 'ge-text-light') and contains(text(),'joined')]")?.InnerText.Trim();
-            if (!string.IsNullOrEmpty(teamName))
+            var teamImageNode = currentTeamNode.SelectSingleNode(".//img");
+            var teamImage = teamImageNode?.GetAttributeValue("src", "").Trim();
+
+            if (!string.IsNullOrEmpty(teamImage))
             {
-                playerStats.CurrentTeam = $"{teamName} ({joinDate})";
+                teamImage = teamImage.StartsWith("//") ? $"https:{teamImage}" : teamImage;
             }
+
+            playerStats.CurrentTeam = teamName;
+            playerStats.CurrentTeamImage = teamImage;
         }
+
 
         // Extract past teams
         var pastTeamNodes = htmlDoc.DocumentNode.SelectNodes("//h2[contains(text(),'Past Teams')]/following-sibling::div/a[contains(@class, 'wf-module-item')]");
@@ -243,7 +254,16 @@ public class VlrScraperService
         {
             foreach (var node in pastTeamNodes)
             {
+                // Extract team name
                 var teamName = node.SelectSingleNode(".//div[contains(@style, 'font-weight: 500')]")?.InnerText.Trim();
+
+                // Handle missing team name
+                if (string.IsNullOrEmpty(teamName))
+                {
+                    teamName = "Unknown Team"; // Default placeholder
+                }
+
+                // Extract duration (with multiple edge case handling)
                 var durationNode = node.SelectNodes(".//div[contains(@class, 'ge-text-light')]");
                 string duration = null;
 
@@ -254,12 +274,17 @@ public class VlrScraperService
                         var text = subNode.InnerText.Trim();
                         if (!string.IsNullOrEmpty(text))
                         {
-                            if (text.Contains("–"))
+                            if (text.Contains("–")) // Typical duration format: "Jan 2022 – Dec 2022"
                             {
                                 duration = text;
                                 break;
                             }
-                            else if (text.StartsWith("left in", StringComparison.OrdinalIgnoreCase))
+                            else if (text.StartsWith("left in", StringComparison.OrdinalIgnoreCase)) // Edge case: "left in 2023"
+                            {
+                                duration = text;
+                                break;
+                            }
+                            else if (text.StartsWith("joined", StringComparison.OrdinalIgnoreCase)) // Edge case: "joined Dec 2021"
                             {
                                 duration = text;
                                 break;
@@ -268,11 +293,23 @@ public class VlrScraperService
                     }
                 }
 
-                if (!string.IsNullOrEmpty(teamName))
+                // Fallback for missing duration
+                if (string.IsNullOrEmpty(duration))
                 {
-                    var fullDuration = !string.IsNullOrEmpty(duration) ? duration : "Unknown Duration";
-                    playerStats.PastTeams.Add($"{teamName} ({fullDuration})");
+                    duration = "Unknown Duration";
                 }
+
+                // Extract team image (if available)
+                var teamImageNode = node.SelectSingleNode(".//img");
+                var teamImage = teamImageNode?.GetAttributeValue("src", "").Trim();
+                if (!string.IsNullOrEmpty(teamImage))
+                {
+                    teamImage = teamImage.StartsWith("//") ? $"https:{teamImage}" : teamImage;
+                }
+
+                // Add team info to player stats
+                playerStats.PastTeams.Add($"{teamName} ({duration})");
+                playerStats.PastTeamImages.Add(teamImage ?? "No Image Available");
             }
         }
 
@@ -289,73 +326,147 @@ public class VlrScraperService
         {
             foreach (var matchNode in matchNodes.Take(3)) // Last three matches
             {
-                var eventName = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-event')]//div[contains(@style, 'font-weight: 700')]")?.InnerText.Trim() ?? "Unknown Event";
+                // Extract event name
+                var eventName = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-event')]//div[contains(@style, 'font-weight: 700')]")
+                    ?.InnerText.Trim() ?? "Unknown Event";
+
+                // Extract stage
                 var stage = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-event')]")?.InnerText.Trim()
                     .Replace("\n", "").Replace("\t", "").Replace("&sdot;", "·").Split('·').LastOrDefault()?.Trim() ?? "Unknown Stage";
-                var teamName = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-team') and not(contains(@class, 'mod-right'))]/span[@class='m-item-team-name']")?.InnerText.Trim() ?? "Unknown Team";
+
+                // Extract match image
+                var matchImageNode = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-thumb')]//img");
+                var matchImage = matchImageNode?.GetAttributeValue("src", "").Trim();
+                if (!string.IsNullOrEmpty(matchImage))
+                {
+                    matchImage = matchImage.StartsWith("//") ? $"https:{matchImage}" : matchImage;
+                }
+
+                // Extract team name
+                var teamName = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-team') and not(contains(@class, 'mod-right'))]/span[@class='m-item-team-name']")
+                    ?.InnerText.Trim() ?? "Unknown Team";
+
+                // Extract team image (fixing the issue)
+                var teamImageNode = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-team') and not(contains(@class, 'mod-right'))]/following-sibling::div[contains(@class, 'm-item-logo')]//img");
+                var teamImage = teamImageNode?.GetAttributeValue("src", "").Trim();
+                if (!string.IsNullOrEmpty(teamImage))
+                {
+                    teamImage = teamImage.StartsWith("//") ? $"https:{teamImage}" : teamImage;
+                }
 
                 // Extract opponent name
                 var opponentNode = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-team') and contains(@class, 'mod-right')]/span[contains(@class, 'm-item-team-name')]");
-                string opponentName = opponentNode?.InnerText.Trim() ?? "Unknown Opponent";
+                var opponentName = opponentNode?.InnerText.Trim() ?? "Unknown Opponent";
 
-                // Debugging: Log the parent node if the opponentNode is not found
-                if (opponentNode == null)
+                // Extract opponent image
+                var opponentImageNode = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-logo mod-right')]//img");
+                var opponentImage = opponentImageNode?.GetAttributeValue("src", "").Trim();
+                if (!string.IsNullOrEmpty(opponentImage))
                 {
-                    var opponentParent = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-team') and contains(@class, 'mod-right')]");
-                    Console.WriteLine($"Opponent Parent HTML: {opponentParent?.OuterHtml ?? "Not Found"}");
+                    opponentImage = opponentImage.StartsWith("//") ? $"https:{opponentImage}" : opponentImage;
                 }
 
+                // Extract result
+                var result = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-result')]")
+                    ?.InnerText.Trim().Replace("\n", "").Replace("\t", "").Replace(" ", "") ?? "Unknown Result";
 
-                // Fallback: Log opponent's div if name extraction fails
-                if (opponentName == "Unknown Opponent")
-                {
-                    var opponentFallback = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-team mod-right')]");
-                    opponentName = opponentFallback?.InnerText.Trim() ?? "Unknown Opponent";
+                // Extract match date and time
+                var date = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-date')]/div")
+                    ?.InnerText.Trim() ?? "Unknown Date";
+                var time = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-date')]/following-sibling::text()")
+                    ?.InnerText.Trim() ?? "Unknown Time";
 
-                    // Debugging log
-                    Console.WriteLine($"Opponent Div HTML: {opponentFallback?.OuterHtml ?? "Not Found"}");
-                }
-
-                // Clean opponent name
-                opponentName = HtmlEntity.DeEntitize(opponentName);
-
-                var result = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-result')]")?.InnerText.Trim()
-                    .Replace("\n", "").Replace("\t", "").Replace(" ", "") ?? "Unknown Result";
-                var date = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-date')]/div")?.InnerText.Trim() ?? "Unknown Date";
-                var time = matchNode.SelectSingleNode(".//div[contains(@class, 'm-item-date')]/following-sibling::text()")?.InnerText.Trim() ?? "Unknown Time";
-
+                // Add match data to player stats
                 playerStats.LastMatches.Add(new MatchResult
                 {
                     EventName = eventName,
                     Stage = stage,
+                    MatchImage = matchImage,
                     TeamName = teamName,
+                    TeamImage = teamImage,
                     Opponent = opponentName,
+                    OpponentImage = opponentImage,
                     Result = result,
                     Date = $"{date} {time}"
                 });
             }
         }
 
-        // Extract agent stats
+        // Extract agent stats and images
         var agentRows = htmlDoc.DocumentNode.SelectNodes("//table[@class='wf-table']//tbody/tr");
         if (agentRows != null)
         {
             foreach (var row in agentRows.Take(3)) // Only take the top 3 agents
             {
+                // Extract agent name
+                var agentName = row.SelectSingleNode(".//img")?.GetAttributeValue("alt", "Unknown") ?? "Unknown";
+
+                // Extract agent image
+                var agentImageNode = row.SelectSingleNode(".//img");
+                var agentImage = agentImageNode?.GetAttributeValue("src", "").Trim();
+                if (!string.IsNullOrEmpty(agentImage))
+                {
+                    agentImage = agentImage.StartsWith("/img/") ? $"https://www.vlr.gg{agentImage}" : agentImage;
+                }
+
+                // Extract usage percentage
+                var usage = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][1]")?.InnerText.Trim() ?? "0%";
+
+                // Extract rounds played
+                var roundsPlayedText = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][2]")?.InnerText.Trim() ?? "0";
+                var roundsPlayed = int.TryParse(roundsPlayedText, out var rp) ? rp : 0;
+
+                // Extract rating
+                var ratingText = row.SelectSingleNode(".//td[contains(@class, 'mod-center')]")?.InnerText.Trim() ?? "0";
+                var rating = double.TryParse(ratingText, out var rt) ? rt : 0;
+
+                // Extract ACS
+                var acsText = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][3]")?.InnerText.Trim() ?? "0";
+                var acs = double.TryParse(acsText, out var ac) ? ac : 0;
+
+                // Extract KD
+                var kdText = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][4]")?.InnerText.Trim() ?? "0";
+                var kd = double.TryParse(kdText, out var kdVal) ? kdVal : 0;
+
+                // Extract ADR
+                var adrText = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][5]")?.InnerText.Trim() ?? "0";
+                var adr = double.TryParse(adrText, out var adrVal) ? adrVal : 0;
+
+                // Extract KAST percentage
+                var kast = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][6]")?.InnerText.Trim() ?? "0%";
+
+                // Extract KPR (Kills Per Round)
+                var kprText = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][7]")?.InnerText.Trim() ?? "0";
+                var kpr = double.TryParse(kprText, out var kprVal) ? kprVal : 0;
+
+                // Extract APR (Assists Per Round)
+                var aprText = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][8]")?.InnerText.Trim() ?? "0";
+                var apr = double.TryParse(aprText, out var aprVal) ? aprVal : 0;
+
+                // Extract FKPR (First Kills Per Round)
+                var fkprText = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][9]")?.InnerText.Trim() ?? "0";
+                var fkpr = double.TryParse(fkprText, out var fkprVal) ? fkprVal : 0;
+
+                // Extract FDPR (First Deaths Per Round)
+                var fdprText = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][10]")?.InnerText.Trim() ?? "0";
+                var fdpr = double.TryParse(fdprText, out var fdprVal) ? fdprVal : 0;
+
+                // Add the extracted data to the list of top agents
                 var agentStats = new AgentStats
                 {
-                    AgentName = row.SelectSingleNode(".//img")?.GetAttributeValue("alt", "Unknown") ?? "Unknown",
-                    Usage = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][1]")?.InnerText.Trim() ?? "0%",
-                    RoundsPlayed = int.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][2]")?.InnerText.Trim() ?? "0"),
-                    Rating = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-center')]")?.InnerText.Trim() ?? "0"),
-                    ACS = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][3]")?.InnerText.Trim() ?? "0"),
-                    KD = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][4]")?.InnerText.Trim() ?? "0"),
-                    ADR = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][5]")?.InnerText.Trim() ?? "0"),
-                    KAST = row.SelectSingleNode(".//td[contains(@class, 'mod-right')][6]")?.InnerText.Trim() ?? "0%",
-                    KPR = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][7]")?.InnerText.Trim() ?? "0"),
-                    APR = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][8]")?.InnerText.Trim() ?? "0"),
-                    FKPR = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][9]")?.InnerText.Trim() ?? "0"),
-                    FDPR = double.Parse(row.SelectSingleNode(".//td[contains(@class, 'mod-right')][10]")?.InnerText.Trim() ?? "0"),
+                    AgentName = agentName,
+                    AgentImage = agentImage,
+                    Usage = usage,
+                    RoundsPlayed = roundsPlayed,
+                    Rating = rating,
+                    ACS = acs,
+                    KD = kd,
+                    ADR = adr,
+                    KAST = kast,
+                    KPR = kpr,
+                    APR = apr,
+                    FKPR = fkpr,
+                    FDPR = fdpr
                 };
 
                 playerStats.TopAgents.Add(agentStats);
