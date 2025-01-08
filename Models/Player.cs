@@ -11,6 +11,12 @@ public class Player
     public string? Country { get; set; }
     public bool IsStaff { get; set; }
     public string? RoleDescription { get; set; } // For staff roles (e.g., head coach)
+
+    // New team fields
+    public string? TeamName { get; set; }
+    public string? TeamCountry { get; set; }
+    public List<string> TeamSocials { get; set; } = new();
+
     [JsonIgnore] // Prevent cyclic reference during serialization
     public Team Team { get; set; } = null!;
 }

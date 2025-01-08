@@ -111,6 +111,21 @@ public class VlrScraperService
         var htmlDoc = new HtmlDocument();
         htmlDoc.LoadHtml(html);
 
+        // Extract team information
+        var teamNameNode = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(@class, 'team-header-name')]//h1[contains(@class, 'wf-title')]");
+        var teamCountryNode = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(@class, 'team-header-country')]/i");
+        var teamSocialLinksNodes = htmlDoc.DocumentNode.SelectNodes("//div[contains(@class, 'team-header-links')]/a");
+
+        var teamName = teamNameNode?.InnerText.Trim() ?? "Unknown Team";
+        var teamCountry = teamCountryNode?.GetAttributeValue("class", "")
+            .Split(' ')
+            .FirstOrDefault(c => c.StartsWith("mod-"))?
+            .Replace("mod-", "") ?? "Unknown";
+        var teamSocials = teamSocialLinksNodes?
+            .Select(link => link.GetAttributeValue("href", "").Trim())
+            .Where(link => !string.IsNullOrEmpty(link))
+            .ToList() ?? new List<string>();
+
         // Find the section of the HTML containing player information
         var playerNodes = htmlDoc.DocumentNode.SelectNodes("//div[contains(@class, 'team-roster-item')]");
         if (playerNodes == null)
@@ -150,7 +165,7 @@ public class VlrScraperService
                 // Determine if this is a staff member
                 var isStaff = roleNode != null;
 
-                // Create a new Player object with additional fields
+                // Create a new Player object with additional team fields
                 var player = new Player
                 {
                     Id = playerId,
@@ -161,7 +176,10 @@ public class VlrScraperService
                     Country = flagNode?.GetAttributeValue("class", "").Split(' ').LastOrDefault()?.Replace("mod-", "") ?? "Unknown",
                     IsStaff = isStaff,
                     RoleDescription = isStaff ? roleNode.InnerText.Trim() : null,
-                    TeamId = teamId
+                    TeamId = teamId,
+                    TeamName = teamName,
+                    TeamCountry = teamCountry,
+                    TeamSocials = teamSocials
                 };
 
                 // Check if the player already exists in the database
@@ -178,6 +196,7 @@ public class VlrScraperService
 
         return players;
     }
+
     public async Task<PlayerStats> ScrapePlayerStats(int playerId)
     {
         var url = $"https://www.vlr.gg/player/{playerId}/?timespan=90d";
