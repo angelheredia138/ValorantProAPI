@@ -27,9 +27,6 @@ using (var scope = app.Services.CreateScope())
     DbSeeder.Seed(context);
 }
 
-// Configure middleware
-app.UseSwagger();
-app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 app.MapControllers();
